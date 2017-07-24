@@ -112,3 +112,142 @@ def runPreprocess(directory, minMag, maxMag, numberOfPoints, scalarProperty):
     processFilePositions(dir, filenames[0], valuePerLine, columnOffset)
         
     print minMagnitude, maxMagnitude
+
+    
+def readBinaryPosFile(filename):
+    filenameNoExt = os.path.splitext(filename)[0]
+
+    with open('Output/' + filenameNoExt + ".pos.bytes", "rb") as f:
+        xyzBin = f.read(4*3)
+        while xyzBin:
+            # Do stuff with byte.
+            #x = struct.unpack("f", float)[0]
+            #float = f.read(4)
+            
+            #y = struct.unpack("f", float)[0]
+            #float = f.read(4)
+            
+            #z = struct.unpack("f", float)[0]
+            #print xyz
+            
+            xyz = struct.unpack('f'*3, xyzBin)
+            #print xyz
+            
+            print str(xyz[0]) + " " + str(xyz[1]) + " " + str(xyz[2])
+            
+            #print x,y,z
+            #float = f.read(4)
+            
+            xyzBin = f.read(4*3)
+    
+    
+    
+def findMinMax(dir, filenames):
+    min = float("inf")
+    max = float("-inf")
+
+    for filename in filenames:
+        print filename
+        with open(dir + "/" + filename) as f:
+            f.readline()
+            for line in f:
+                strippedLined = line.strip()
+                lines = strippedLined.split(',')
+                magnitude = float(lines[0])
+                if magnitude < min:
+                    min = magnitude
+                    print min, max
+                elif magnitude > max:
+                    max = magnitude
+                    print min, max
+                    
+    print min, max
+    return min, max
+    
+def createValuesFileAndIndexFile(dir, filename, minMag, maxMag, minDesired, maxDesired):
+    fIn = open(dir + "/" + filename)
+    filenameNoExt = os.path.splitext(filename)[0]
+    fOut = open("Output/" + filenameNoExt + ".bytes", "wb+")
+    #fOutIndices = open("Output/" + filenameNoExt + ".indices.bytes", "wb+")
+    
+    indices = []
+    
+    #skip first line
+    fIn.readline()	
+    for i, line in enumerate(fIn):
+        strippedLined = line.strip()
+        lines = strippedLined.split(',')
+        magnitude = float(lines[0])
+        
+        if magnitude >= minDesired and magnitude <= maxDesired:
+            indices.append(i)
+        
+            #print i
+            bytes = struct.unpack('4B', struct.pack('<I', i))
+            
+            value = int(((magnitude - minMag) / (maxMag - minMag)) * 255.0) #x -> 0-255
+            #data = struct.pack('B', value) #pack values as binary byte 
+            
+            #We pack the 8bit color value along with the 24bit position index:
+            val = struct.unpack('I', bytearray([value]) + bytearray(bytes[0:3]))[0]
+            
+            #print i
+            
+            packedValue = struct.pack('I', val)
+            
+            #print bytearray(bytes)
+            #print struct.unpack('I', bytearray(bytes[0:3]) + bytearray([0]))[0]
+            
+        
+            #indexBin = struct.pack('I', i) #pack values as binary byte 
+            #fOutIndices.write(indexBin)
+        
+            #value = int(((magnitude - minMag) / (maxMag - minMag)) * 255.0) #x -> 0-255
+            #data = struct.pack('B', value) #pack values as binary byte 
+            fOut.write(packedValue)            
+           
+    fIn.close()
+    fOut.close()
+    #fOutIndices.close()
+    
+    #print(len(indices))
+    
+def runPreprocess(minDesired, maxDesired):
+    dir = 'Data' + '/output'
+    filenames = [name for name in os.listdir(dir) if os.path.isfile(os.path.join(dir, name))]
+    numFiles = len(filenames)
+
+    print numFiles
+    
+    minMag = 0.0
+    maxMag = 0.735
+    
+    #processFilePositions(dir, filenames[0], [], 1)
+    
+    for filename in filenames:
+        createValuesFileAndIndexFile(dir, filename, minMag, maxMag, minDesired, maxDesired)
+    
+    #findMinMax(dir, filenames)
+    #Oil Rig: min: 0.0, max: 0.735
+    
+    #readBinaryPosFile(filenames[0])
+    
+runPreprocess(0.01, 1.0)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
