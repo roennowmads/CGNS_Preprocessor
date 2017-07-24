@@ -2,7 +2,7 @@ import math
 import os, os.path
 import struct
 
-def processFilePositions(dir, filename, valuePerLine, columnOffset):
+def processFilePositions(indices, oldToNewIndex, dir, filename, valuePerLine, columnOffset):
     fIn = open(dir + "/" + filename)
     filenameNoExt = os.path.splitext(filename)[0]
     
@@ -11,28 +11,33 @@ def processFilePositions(dir, filename, valuePerLine, columnOffset):
     numberOfFinalPoints = 0
     
     #skip first line
-    fIn.readline()	
+    fIn.readline()
+    index = 0
     for i, line in enumerate(fIn):
-        #if valuePerLine[i] <> 0:
-        strippedLined = line.strip()
-        lines = strippedLined.split(',')
-        
-        x = float(lines[columnOffset])
-        y = float(lines[columnOffset + 1])
-        z = float(lines[columnOffset + 2])
-
-        dataX = struct.pack('f',x)
-        dataY = struct.pack('f',y)
-        dataZ = struct.pack('f',z)
-
-        fOut.write(dataX)
-        fOut.write(dataY)
-        fOut.write(dataZ)
-        numberOfFinalPoints += 1
+        if i in indices:
+            #if valuePerLine[i] <> 0:
+            strippedLined = line.strip()
+            lines = strippedLined.split(',')
             
+            x = float(lines[columnOffset])
+            y = float(lines[columnOffset + 1])
+            z = float(lines[columnOffset + 2])
 
-        if (i % 100000) == 0:
-            print "Positions processed:", i
+            dataX = struct.pack('f',x)
+            dataY = struct.pack('f',y)
+            dataZ = struct.pack('f',z)
+
+            fOut.write(dataX)
+            fOut.write(dataY)
+            fOut.write(dataZ)
+            numberOfFinalPoints += 1
+            
+            oldToNewIndex[i] = index
+            
+            index += 1
+
+            if (i % 100000) == 0:
+                print "Positions processed:", i
     
     fIn.close()
     fOut.close()
@@ -73,7 +78,7 @@ def processFileValues(dir, filename, valuePerLine, fileData):
     fOut.close()
     
     
-def runPreprocess(directory, minMag, maxMag, numberOfPoints, scalarProperty):
+'''def runPreprocess(directory, minMag, maxMag, numberOfPoints, scalarProperty):
     dir = directory + '\output'
     filenames = [name for name in os.listdir(dir) if os.path.isfile(os.path.join(dir, name))]
     numFiles = len(filenames)
@@ -111,7 +116,7 @@ def runPreprocess(directory, minMag, maxMag, numberOfPoints, scalarProperty):
     print "Processing positions..."
     processFilePositions(dir, filenames[0], valuePerLine, columnOffset)
         
-    print minMagnitude, maxMagnitude
+    print minMagnitude, maxMagnitude'''
 
     
 def readBinaryPosFile(filename):
@@ -164,13 +169,9 @@ def findMinMax(dir, filenames):
     print min, max
     return min, max
     
-def createValuesFileAndIndexFile(dir, filename, minMag, maxMag, minDesired, maxDesired):
-    fIn = open(dir + "/" + filename)
-    filenameNoExt = os.path.splitext(filename)[0]
-    fOut = open("Output/" + filenameNoExt + ".bytes", "wb+")
-    #fOutIndices = open("Output/" + filenameNoExt + ".indices.bytes", "wb+")
     
-    indices = []
+def findUsedIndices(indices, dir, filename, minDesired, maxDesired):
+    fIn = open(dir + "/" + filename)
     
     #skip first line
     fIn.readline()	
@@ -180,38 +181,44 @@ def createValuesFileAndIndexFile(dir, filename, minMag, maxMag, minDesired, maxD
         magnitude = float(lines[0])
         
         if magnitude >= minDesired and magnitude <= maxDesired:
-            indices.append(i)
-        
-            #print i
-            bytes = struct.unpack('4B', struct.pack('<I', i))
+            if i not in indices:
+                indices[i] = True
+                
+                #if len(indices) % 10000 == 0:
+                #    print magnitude, len(indices)
+           
+    fIn.close()
+    print len(indices)
+    
+def createValuesFileAndIndexFile(indices, oldToNewIndex, dir, filename, minMag, maxMag, minDesired, maxDesired):
+    fIn = open(dir + "/" + filename)
+    filenameNoExt = os.path.splitext(filename)[0]
+    fOut = open("Output/" + filenameNoExt + ".bytes", "wb+")
+    
+    #skip first line
+    fIn.readline()	
+    for i, line in enumerate(fIn):
+        if i in indices:
+            strippedLined = line.strip()
+            lines = strippedLined.split(',')
+            magnitude = float(lines[0])
             
-            value = int(((magnitude - minMag) / (maxMag - minMag)) * 255.0) #x -> 0-255
-            #data = struct.pack('B', value) #pack values as binary byte 
-            
-            #We pack the 8bit color value along with the 24bit position index:
-            val = struct.unpack('I', bytearray([value]) + bytearray(bytes[0:3]))[0]
-            
-            #print i
-            
-            packedValue = struct.pack('I', val)
-            
-            #print bytearray(bytes)
-            #print struct.unpack('I', bytearray(bytes[0:3]) + bytearray([0]))[0]
-            
-        
-            #indexBin = struct.pack('I', i) #pack values as binary byte 
-            #fOutIndices.write(indexBin)
-        
-            #value = int(((magnitude - minMag) / (maxMag - minMag)) * 255.0) #x -> 0-255
-            #data = struct.pack('B', value) #pack values as binary byte 
-            fOut.write(packedValue)            
+            if magnitude >= minDesired and magnitude <= maxDesired:
+                bytes = struct.unpack('4B', struct.pack('<I', oldToNewIndex[i]))
+                
+                value = int(((magnitude - minMag) / (maxMag - minMag)) * 255.0) #x -> 0-255
+                #data = struct.pack('B', value) #pack values as binary byte 
+                
+                #We pack the 8bit color value along with the 24bit position index:
+                val = struct.unpack('I', bytearray([value]) + bytearray(bytes[0:3]))[0]
+                
+                packedValue = struct.pack('I', val)
+                fOut.write(packedValue)          
            
     fIn.close()
     fOut.close()
-    #fOutIndices.close()
     
-    #print(len(indices))
-    
+
 def runPreprocess(minDesired, maxDesired):
     dir = 'Data' + '/output'
     filenames = [name for name in os.listdir(dir) if os.path.isfile(os.path.join(dir, name))]
@@ -222,10 +229,18 @@ def runPreprocess(minDesired, maxDesired):
     minMag = 0.0
     maxMag = 0.735
     
-    #processFilePositions(dir, filenames[0], [], 1)
+    
+    
+    indices = {}
+    for filename in filenames:
+        findUsedIndices(indices, dir, filename, minDesired, maxDesired)
+    
+    
+    oldToNewIndex = {}
+    processFilePositions(indices, oldToNewIndex, dir, filenames[0], [], 1)
     
     for filename in filenames:
-        createValuesFileAndIndexFile(dir, filename, minMag, maxMag, minDesired, maxDesired)
+        createValuesFileAndIndexFile(indices, oldToNewIndex, dir, filename, minMag, maxMag, minDesired, maxDesired)   
     
     #findMinMax(dir, filenames)
     #Oil Rig: min: 0.0, max: 0.735
